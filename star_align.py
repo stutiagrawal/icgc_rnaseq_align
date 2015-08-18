@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ICGC RNA-Seq alignment wrapper for STAR alignments.", formatter_class=argparse.ArgumentDefaultsHelpFormatter, usage='%(prog)s [options]', add_help=False)
     required = parser.add_argument_group("Required input parameters")
     required.add_argument("--genomeDir", default=None, help="Directory containing the reference genome index", required=True)
-    required.add_argument("--tarFileIn", default=None, help="Input file containing the sequence information", required=True)
+    required.add_argument("--FastqFileIn", default=None, help="Input file containing the sequence information", required=True)
     optional = parser.add_argument_group("optional input parameters")
     optional.add_argument("--out", default="out.bam", help="Name of the output BAM file")
     optional.add_argument("--workDir", default="./", help="Work directory")
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         raise Exception("File provided via --outSAMattrRGxml does not exist\nFile: %s" % args.outSAMattrRGxml)
     if args.outSAMattrRGfile is not None and not os.path.exists(args.outSAMattrRGfile):
         raise Exception("File provided via --outSAMattrRGfile does not exist\nFile: %s" % args.outSAMattrRGfile)
-
+"""
     ### handling of input file (unpacking, etc. )
     if args.useTMP is not None:
         workdir = tempfile.mkdtemp(dir=os.environ[args.useTMP], prefix="star_inputdir_")
@@ -218,9 +218,9 @@ if __name__ == "__main__":
     else:
         raise Exception("Unknown input file extension for file %s" % (args.tarFileIn))
     subprocess.check_call(tarcmd, shell=True)
-    
+"""    
     ### collect fastq information from extraction dir
-    align_sets = scan_workdir(os.path.abspath(workdir))
+    align_sets = scan_workdir(os.path.abspath(args.FastqFileIn))
     
     ### process read group information
     files = []
@@ -443,7 +443,7 @@ if __name__ == "__main__":
         shutil.move(os.path.join(align_dir, 'SJ.out.tab'), args.out + '.junctions')
 
     ### clean up working directory
-    shutil.rmtree(workdir)
+   # shutil.rmtree(workdir)
     shutil.rmtree(align_dir)
     if args.twopass1readsN != 0:
         shutil.rmtree(align_dir_1st)
