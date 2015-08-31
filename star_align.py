@@ -9,15 +9,47 @@ import subprocess
 import argparse
 import shutil
 import lxml.etree as etree
-from glob import glob
+import fnmatch
 
-def scan_workdir(base): 
+def walk_dir(base, pattern):
+    files = []
+    for root, dirnames, filenames in os.walk(base):
+        for fname in fnmatch.filter(filenames, pattern):
+            files.append(os.path.join(root, fname))
+    return files
+
+def scan_workdir(base):
 
     ### scan for paired-end files
     #############################
 
-    ### unzipped input
-    fastq_files = glob(os.path.join(base, "*_[12].fastq"))
+    ### unzipped fastq input
+    fastq_files = walk_dir(base, "*_read[12]_*")
+    if len(fastq_files):
+        o = {}
+        for i in sorted(fastq_files):
+            basename = re.sub(r'_read[12]', '', i)
+            try:
+                o[basename].append(i)
+            except KeyError:
+                o[basename] = [i]
+        if not all( (len(i) == 2 for i in o.values())):
+            raise Exception("Missing Pair")
+        return ( 'cat', list( (os.path.basename(i), o[i][0], o[i][1]) for i in o.keys()), 'PE')
+
+    ### unzipped fastq input
+    fastq_files = walk_dir(base, "*_R[12]_001.fastq")
+    if len(fastq_files):
+        o = {}
+        for i in fastq_files:
+            basename = re.sub(r'_R[12]_001.fastq$', '', i)
+            o[basename] = o.get(basename, 0) + 1
+        if not all( (i == 2 for i in o.values())):
+            raise Exception("Missing Pair")
+        return ( 'cat', list( (os.path.basename(i), "%s_R1_001.fastq" % i,"%s_R2_001.fastq" % i) for i in o.keys()), 'PE')
+
+    ### unzipped fastq input
+    fastq_files = walk_dir(base, "*_[12].fastq")
     if len(fastq_files):
         o = {}
         for i in fastq_files:
@@ -25,10 +57,21 @@ def scan_workdir(base):
             o[basename] = o.get(basename, 0) + 1
         if not all( (i == 2 for i in o.values())):
             raise Exception("Missing Pair")
-        return ( 'cat', list( (os.path.basename(i), "%s_1.fastq" % i,"%s_2.fastq" % i) for i in o.keys()), 'PE') 
-    
+        return ( 'cat', list( (os.path.basename(i), "%s_1.fastq" % i,"%s_2.fastq" % i) for i in o.keys()), 'PE')
+
+    ### unzipped txt input
+    fastq_files = walk_dir(base, "*_[12]_sequence.txt")
+    if len(fastq_files):
+        o = {}
+        for i in fastq_files:
+            basename = re.sub(r'_[12]_sequence.txt$', '', i)
+            o[basename] = o.get(basename, 0) + 1
+        if not all( (i == 2 for i in o.values())):
+            raise Exception("Missing Pair")
+        return ( 'cat', list( (os.path.basename(i), "%s_1_sequence.txt" % i,"%s_2_sequence.txt" % i) for i in o.keys()), 'PE')
+
     ### gzipped input
-    fastq_gz_files = glob(os.path.join(base, "*_[12].fastq.gz"))
+    fastq_gz_files = walk_dir(base, "*_[12].fastq.gz")
     if len(fastq_gz_files):
         o = {}
         for i in fastq_gz_files:
@@ -36,10 +79,10 @@ def scan_workdir(base):
             o[basename] = o.get(basename, 0) + 1
         if not all( (i == 2 for i in o.values())):
             raise Exception("Missing Pair")
-        return ( 'zcat', list( (os.path.basename(i), "%s_1.fastq.gz" % i,"%s_2.fastq.gz" % i) for i in o.keys()), 'PE') 
+        return ( 'zcat', list( (os.path.basename(i), "%s_1.fastq.gz" % i,"%s_2.fastq.gz" % i) for i in o.keys()), 'PE')
 
     ### bzipped input
-    fastq_bz_files = glob(os.path.join(base, "*_[12].fastq.bz"))
+    fastq_bz_files = walk_dir(base, "*_[12].fastq.bz")
     if len(fastq_gz_files):
         o = {}
         for i in fastq_gz_files:
@@ -47,25 +90,25 @@ def scan_workdir(base):
             o[basename] = o.get(basename, 0) + 1
         if not all( (i == 2 for i in o.values())):
             raise Exception("Missing Pair")
-        return ( 'bzcat', list( (os.path.basename(i), "%s_1.fastq.bz" % i,"%s_2.fastq.bz" % i) for i in o.keys()), 'PE') 
+        return ( 'bzcat', list( (os.path.basename(i), "%s_1.fastq.bz" % i,"%s_2.fastq.bz" % i) for i in o.keys()), 'PE')
 
     ### scan for single-end files
     #############################
 
     ### unzipped input
-    fastq_files = glob(os.path.join(base, "*.fastq"))
+    fastq_files = walk_dir(base, "*.fastq")
     if len(fastq_files):
-        return ( 'cat', list( (os.path.basename(re.sub(r'.fastq$', '', i)), i) for i in fastq_files), 'SE') 
+        return ( 'cat', list( (os.path.basename(re.sub(r'.fastq$', '', i)), i) for i in fastq_files), 'SE')
 
     ### gzipped input
-    fastq_files = glob(os.path.join(base, "*.fastq.gz"))
+    fastq_files = walk_dir(base, "*.fastq.gz")
     if len(fastq_files):
-        return ( 'zcat', list( (os.path.basename(re.sub(r'.fastq.gz$', '', i)), i) for i in fastq_files), 'SE') 
+        return ( 'zcat', list( (os.path.basename(re.sub(r'.fastq.gz$', '', i)), i) for i in fastq_files), 'SE')
 
     ### bzipped input
-    fastq_files = glob(os.path.join(base, "*.fastq.bz"))
+    fastq_files = walk_dir(base, "*.fastq.bz")
     if len(fastq_files):
-        return ( 'bzcat', list( (os.path.basename(re.sub(r'.fastq.bz$', '', i)), i) for i in fastq_files), 'SE') 
+        return ( 'bzcat', list( (os.path.basename(re.sub(r'.fastq.bz$', '', i)), i) for i in fastq_files), 'SE')
 
     raise Exception("Unable to determine input type")
 
@@ -84,7 +127,7 @@ def spreadsheet2dict(spreadFile):
                 key2field[key] = k
         else:
             spreadDict[sl[key2field['analysis_id']]] = sl
-    
+
     return (spreadDict, key2field)
 
 
@@ -116,7 +159,7 @@ def spreadsheet2RGdict(spreadFile, analysisID):
 
 
 def xml2RGdict(xmlfile):
-    
+
     ### read xml in
     root = etree.parse(xmlfile)
     rtree = root.find('Result')
@@ -131,7 +174,7 @@ def xml2RGdict(xmlfile):
     sample_id = rtree.find('sample_id').text
     submitter_id = rtree.find('legacy_sample_id').text
     library_id = rtree.find('experiment_xml/EXPERIMENT_SET/EXPERIMENT').attrib['alias']
-    platform = rtree.find('experiment_xml/EXPERIMENT_SET/EXPERIMENT/PLATFORM').getchildren()[0].tag 
+    platform = rtree.find('experiment_xml/EXPERIMENT_SET/EXPERIMENT/PLATFORM').getchildren()[0].tag
     instrument = rtree.find('experiment_xml/EXPERIMENT_SET/EXPERIMENT/PLATFORM/*/INSTRUMENT_MODEL').text
 
     ### build dictionary
@@ -148,7 +191,7 @@ def xml2RGdict(xmlfile):
 
 
 if __name__ == "__main__":
-
+    print "running pipeline"
     parser = argparse.ArgumentParser(description="ICGC RNA-Seq alignment wrapper for STAR alignments.", formatter_class=argparse.ArgumentDefaultsHelpFormatter, usage='%(prog)s [options]', add_help=False)
     required = parser.add_argument_group("Required input parameters")
     required.add_argument("--genomeDir", default=None, help="Directory containing the reference genome index", required=True)
@@ -185,8 +228,9 @@ if __name__ == "__main__":
     star.add_argument("--outSAMattrRGline", default=None, help="RG attribute line submitted to outSAMattrRGline")
     star.add_argument("--outSAMattrRGfile", default=None, help="File containing the RG attribute line submitted to outSAMattrRGline")
     star.add_argument("--outSAMattrRGxml", default=None, help="XML-File in TCGA format to compile RG attribute line")
-    
+
     ### check completeness of command line inputs
+    print "checking completeness of cmd line params"
     if len(sys.argv) < 2:
         parser.print_help()
         sys.exit(0)
@@ -194,6 +238,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     ### some sanity checks on command line parameters
+    print "performing sanity checks"
     if args.metaDataTab is not None:
         if not os.path.exists(args.metaDataTab):
             raise Exception("File provided via --metaDataTab does not exist\nFile: %s" % args.metaDataTab)
@@ -203,8 +248,10 @@ if __name__ == "__main__":
         raise Exception("File provided via --outSAMattrRGxml does not exist\nFile: %s" % args.outSAMattrRGxml)
     if args.outSAMattrRGfile is not None and not os.path.exists(args.outSAMattrRGfile):
         raise Exception("File provided via --outSAMattrRGfile does not exist\nFile: %s" % args.outSAMattrRGfile)
-"""
+
+    """
     ### handling of input file (unpacking, etc. )
+    print "Unpacking input file"
     if args.useTMP is not None:
         workdir = tempfile.mkdtemp(dir=os.environ[args.useTMP], prefix="star_inputdir_")
     else:
@@ -215,17 +262,24 @@ if __name__ == "__main__":
         tarcmd = "tar xvjf %s -C %s" % (args.tarFileIn, workdir)
     elif args.tarFileIn.endswith(".tar"):
         tarcmd = "tar xvf %s -C %s" % (args.tarFileIn, workdir)
+    elif args.tarFileIn.endswith(".sra"):
+        tarcmd = "fastq-dump --gzip --split-3 --outdir %s %s" % (workdir, args.tarFileIn)
     else:
         raise Exception("Unknown input file extension for file %s" % (args.tarFileIn))
     subprocess.check_call(tarcmd, shell=True)
-"""    
+    """
+
     ### collect fastq information from extraction dir
+    print "scanning workdir"
     align_sets = scan_workdir(os.path.abspath(args.FastqFileIn))
-    
+
+    print "Align sets are: ",
+    print align_sets
     ### process read group information
+    print "processing read group information"
     files = []
     if args.metaDataTab is not None:
-        (RG_dict, files_tmp) = spreadsheet2RGdict(args.metaDataTab, args.analysisID) 
+        (RG_dict, files_tmp) = spreadsheet2RGdict(args.metaDataTab, args.analysisID)
         files.extend(files_tmp)
     elif args.outSAMattrRGxml is not None:
         RG_dict = xml2RGdict(args.outSAMattrRGxml)
@@ -254,17 +308,21 @@ if __name__ == "__main__":
     ### use filename stub as read group label
     RG_dict['RG'] = []
     for fn in [x[1] for x in align_sets[1]]:
-        RG_dict['RG'].append(re.sub('(_[12]){,1}.fastq(.(gz|bz2|bz))*', '', os.path.basename(fn)))
+        fn_stub = re.sub('(_[12]){,1}.fastq(.(gz|bz2|bz))*', '', os.path.basename(fn))
+        fn_stub = re.sub('(_[12]){,1}_sequence.txt(.(gz|bz2|bz))*', '', fn_stub)
+        fn_stub = re.sub('_read[12]', '', fn_stub)
+        fn_stub = re.sub('_R[12]_001$', '', fn_stub)
+        RG_dict['RG'].append(fn_stub)
 
     ### prepare template string
     if align_sets[2] == 'PE':
         read_str = '${fastq_left} ${fastq_right}'
     else:
         read_str = '${fastq_left}'
-    
+
     ### simulate two pass alignment until STAR fully implements this
     if args.twopass1readsN != 0:
-        
+
         ### run first round of alignments and only record junctions
         align_template_str_1st = """STAR \
 --genomeDir ${genomeDir} --readFilesIn %s \
@@ -326,7 +384,7 @@ if __name__ == "__main__":
 --genomeFastaFiles %s \
 --sjdbOverhang %i \
 --runThreadN %i \
---sjdbFileChrStartEnd %s""" % (genome_dir_1st, args.genomeFastaFiles, args.sjdbOverhang, args.runThreadN, os.path.join(align_dir_1st, 'SJ.out.tab')) 
+--sjdbFileChrStartEnd %s""" % (genome_dir_1st, args.genomeFastaFiles, args.sjdbOverhang, args.runThreadN, os.path.join(align_dir_1st, 'SJ.out.tab'))
         print "Running", cmd
         subprocess.check_call(cmd, shell=True, cwd=align_dir_1st)
 
@@ -379,7 +437,7 @@ if __name__ == "__main__":
         'sjdbOverhang' : args.sjdbOverhang,
         'outSAMstrandField' : args.outSAMstrandField,
         'outSAMattributes' : " ".join(args.outSAMattributes),
-        'outSAMunmapped' : args.outSAMunmapped, 
+        'outSAMunmapped' : args.outSAMunmapped,
         'outSAMtype' : " ".join(args.outSAMtype),
         'outSAMheaderHD' : " ".join(args.outSAMheaderHD)
     })
@@ -412,13 +470,13 @@ if __name__ == "__main__":
             comment_file = os.path.abspath( tempfile.mkstemp(dir=os.environ[args.useTMP], prefix="star_comments_")[1] )
         else:
             comment_file = os.path.abspath( tempfile.mkstemp(dir=args.workDir, prefix="star_comments_")[1] )
-        
+
         fd_com = open(comment_file, 'w')
         fd_com.write('@CO\tsubmitter_sample_id:%s\n' % RG_dict['SI'])
 
         fd_com.flush()
         fd_com.close()
-        
+
         cmd += ' --outSAMheaderCommentFile %s' % comment_file
 
 
@@ -436,14 +494,14 @@ if __name__ == "__main__":
     elif 'BAM' in args.outSAMtype and 'Unsorted' in args.outSAMtype:
         shutil.move(os.path.join(align_dir, 'Aligned.out.bam'), args.out)
     else:
-        raise Exception('STAR output file could not be determined') 
+        raise Exception('STAR output file could not be determined')
 
     ### move junctions if to be kept
     if args.keepJunctions:
         shutil.move(os.path.join(align_dir, 'SJ.out.tab'), args.out + '.junctions')
 
     ### clean up working directory
-   # shutil.rmtree(workdir)
+    #shutil.rmtree(workdir)
     shutil.rmtree(align_dir)
     if args.twopass1readsN != 0:
         shutil.rmtree(align_dir_1st)
